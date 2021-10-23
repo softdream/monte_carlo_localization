@@ -7,16 +7,16 @@
 #include <vector>
 #include <sstream>
 
-#define total_readings 180
+#define total_readings 360
 
 
 typedef struct
 {
         int data_type;                                                  // 0-里程计数据,1-激光雷达数据
         float x_robot,y_robot,theta_robot;              // 机器人位姿
-        float x_lidar,y_lidar,theta_lidar;              // 激光雷达位姿
+        //float x_lidar,y_lidar,theta_lidar;              // 激光雷达位姿
         float* readings;                                                // 激光雷达读数
-        float time_stamp;                                               // 时间戳
+        //float time_stamp;                                               // 时间戳
 }log_data;
 
 
@@ -37,48 +37,53 @@ public:
 	{
 		std::ifstream file (logfile);
 	        std::string logline;
-        	log_data logdata_indv;
 
 		if(!file.is_open()){
 			return false;
 		}
 
 		while(std::getline(file, logline)){
+			log_data logdata_indv;
+	
 			std::istringstream iss(logline);
-                        char c;
-                        iss >> c;
+                        std::string tag;
+                        iss >> tag;
                         int j = 0;
-                        switch(c) {
-				case 'L':
-                                	logdata_indv.data_type = 1;             //此行数据包括odom和lidar
-                                	iss >> logdata_indv.x_robot >> logdata_indv.y_robot >> logdata_indv.theta_robot;        //读取机器人位姿,单位：cm;cm;rad
-                                	iss >> logdata_indv.x_lidar >> logdata_indv.y_lidar >> logdata_indv.theta_lidar;        //读取激光雷达位姿,单位：cm;cm;rad
+			
+			if( tag.compare( "laser" ) == 0 ){
+                                	logdata_indv.data_type = 1;             //此行数据包括lidar
+				
                                 	logdata_indv.readings = (float*) malloc(sizeof(float) * total_readings);
                                 	while (j < total_readings){
-                                		iss >> logdata_indv.readings[j];
-                                        	logdata_indv.readings[j] /= 10.0;    //lidar读数换算成dm,因为地图的分辨率是1dm,统一单位方便后面计算
+						std::string num;
+						iss >> num;
+						if( num.compare("inf") ){
+							logdata_indv.readings[j] = std::stof( num ) * 10.0;
+						}
+						else {
+							logdata_indv.readings[j] = 65536.0;
+						}
                                         	j++;
                                         	// cout << logdata_indv.readings[j] << endl;
                                 	}
-                                	iss >> logdata_indv.time_stamp;    //读取时间戳
-                                	break;
-				case 'O':       //此行数据只包括odom
-                                        logdata_indv.data_type = 0;
-                                        iss >> logdata_indv.x_robot >> logdata_indv.y_robot >> logdata_indv.theta_robot;
-                                        iss >> logdata_indv.time_stamp;
-                                        break;
-                                default:
-                                        break;
 			}
+
+			if( tag.compare( "odom" ) == 0 ){
+				//此行数据只包括odom
+                                logdata_indv.data_type = 0;
+                                iss >> logdata_indv.x_robot >> logdata_indv.y_robot >> logdata_indv.theta_robot;
+			}
+
 			logfile_data.push_back(logdata_indv);   //存入vector中
 
 		}
 	}
 
-        std::vector<log_data> getLog()
+        const std::vector<log_data> getLog() const
 	{
 		return log;
 	}
+
         void showLogData()	
 	{
 		log_data indv;

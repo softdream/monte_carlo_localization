@@ -9,7 +9,7 @@
 #define	pi            3.1415926536
 #define	ODOM_DATA             0
 #define	LIDAR_DATA            1
-#define	LASER_BEAM_NUM        180
+#define	LASER_BEAM_NUM        360
 
 
 typedef struct
@@ -71,7 +71,7 @@ public:
 			particle_temp.x = rand() / (float)RAND_MAX * (map_->getValidAreaMaxX() - map_->getValidAreaMinX()) + map_->getValidAreaMinX(); //初始化粒子X坐标
                 	particle_temp.y = rand() / (float)RAND_MAX * (map_->getValidAreaMaxY() - map_->getValidAreaMinY()) + map_->getValidAreaMinY();  //初始化粒子Y坐标
 
-			if (map_->getProb( (int) particle_temp.x, (int) particle_temp.y ) <= map_threshold_)  //若随机出的粒子不在地图有效范围内,则重新生成粒子
+			if (map_->getProb( (int) particle_temp.x, (int) particle_temp.y ) >= 0.0)  //若随机出的粒子不在地图有效范围内,则重新生成粒子
 				continue;
 	
 			count ++;
@@ -104,9 +104,9 @@ public:
         	float deltarot2_hat  = deltarot2 - sampleStandardNormalDistribution(alpha1_*deltarot2 + alpha2_*deltatrans1);
 
         	particle_state particle_temp;
-        	//地图是以dm为单位,初始化的粒子位置是基于地图生成的,所以也是dm单位,而里程计数据单位是cm,需在这里进行单位转换
-        	particle_temp.x = particle.x + (deltatrans1_hat * cos(particle.theta + deltarot1_hat)) / resolution_;
-        	particle_temp.y = particle.y + (deltatrans1_hat * sin(particle.theta + deltarot1_hat)) / resolution_;
+        	//地图是以dm为单位,初始化的粒子位置是基于地图生成的,所以也是dm单位,而里程计数据单位是m,需在这里进行单位转换
+        	particle_temp.x = particle.x + (deltatrans1_hat * cos(particle.theta + deltarot1_hat)) * 10;
+        	particle_temp.y = particle.y + (deltatrans1_hat * sin(particle.theta + deltarot1_hat)) * 10;
         	particle_temp.theta = particle.theta + deltarot1_hat + deltarot2_hat;
         	particle_temp.weight = particle.weight;
 
@@ -130,36 +130,39 @@ public:
 	        float laser_end_x,laser_end_y,score = 0, zkt = 0;
 
 	    	//计算激光雷达在map坐标系下的位姿
-        	lidar_pose.x = particle.x + (lidar_offset_ * cos(particle.theta)) / resolution_;        //(单位：dm)
-        	lidar_pose.y = particle.y + (lidar_offset_ * sin(particle.theta)) / resolution_;        //(单位：dm)
+        	lidar_pose.x = particle.x + (lidar_offset_ * cos(particle.theta)) * resolution_;        //(单位：dm)
+        	lidar_pose.y = particle.y + (lidar_offset_ * sin(particle.theta)) * resolution_;        //(单位：dm)
         	lidar_pose.theta = particle.theta;
 
         	//若雷达位姿在地图有效区域外,则终止此次计算,该粒子权重为0
-        	if(map_->getProb( (int)lidar_pose.x, (int)lidar_pose.y ) <= map_threshold_)  
-               	 	return 0.0;
-			
+        	//if(map_->getProb( (int)lidar_pose.x, (int)lidar_pose.y ) <= map_threshold_)  
+               	// 	return 0.0;
+		
+		float step_theta = -3.12413907051f;
 		for (int i = 0; i < LASER_BEAM_NUM; i++){
                 	zkt = measurement_.readings[i];         //第i个激光束的测距，单位：dm,从log文件读取时就已经转换成dm了
 
                 	//若超出设置的lidar最大有效值，则此光束无效
-                	if (zkt > (lidar_range_max_ / resolution_))
+                	if (zkt > (lidar_range_max_ * resolution_))
                         	continue;
 
 	                //计算第i个激光束在世界坐标系下的角度
-        	        float step_theta = ((double)i / 180.0) * pi + lidar_pose.theta - pi/2.0;
-
+			step_theta += 0.0174532924f;
+		
                 	laser_end_x = lidar_pose.x + zkt * cos(step_theta);     //计算>此激光束末端在map坐标系下的X坐标
 	                laser_end_y = lidar_pose.y + zkt * sin(step_theta);     //计算>此激光束末端在map坐标系下的Y坐标
 
         	        //若激光束末端在地图未知区域或无效区域，则跳过此次得分计算
-                	if(laser_end_x >= map_->getValidAreaMaxX() || laser_end_y >= map_->getValidAreaMaxY() || laser_end_x < map_->getValidAreaMinX() || laser_end_y < map_->getValidAreaMinY() || map_->getProb( (int)laser_end_x, (int)laser_end_y ) < 0)
-                   		continue;
+                	//if(laser_end_x >= map_->getValidAreaMaxX() || laser_end_y >= map_->getValidAreaMaxY() || laser_end_x < map_->getValidAreaMinX() || laser_end_y < map_->getValidAreaMinY() || map_->getProb( (int)laser_end_x, (int)laser_end_y ) < 0)
+                   	//	continue;
 
                 	// if(map_->prob[(int)laser_end_x][(int)laser_end_y] >= 0 && map_->prob[(int)laser_end_x][(int)laser_end_y] < 0.15)
                 	//      score++;
 
-                	score += map_->getProb( (int)laser_end_x, (int)laser_end_y ) < 0.15 ? 1 : 0; //累加，计算此帧lidar数据的得分
-        	}
+                	score += map_->getProb( (int)laser_end_x, (int)laser_end_y )  > 0 ? 1 : 0; //累加，计算此帧lidar数据的得分
+        		//score += 10 * map_->getProb( (int)laser_end_x, (int)laser_end_y ); //累加，计算此帧lidar数据的得分
+
+		}
 
         	return score;   //返回当前帧lidar数据的得分，用此来表示粒子权重
 	}
@@ -174,14 +177,23 @@ public:
 
 		for( int x = 0; x < sizeX; x ++ ){
 	                for( int y = 0; y < sizeY; y ++ ){
-        	                uint8_t v = (uint8_t)(this->map_->getProb( x, y ) * 255);
-                	        cv::Vec3b p;
-                        	p[0] = v;
-	                        p[1] = v;
-        	                p[2] = v;
+                		if( this->map_->getProb(x, y) > 0.0 ){
+                                        cv::Vec3b p;
+                                        p[0] = 0;
+                                        p[1] = 0;
+                                        p[2] = 0;
 
-                	        image.at<cv::Vec3b>(x, y) = p;
-                	}
+                                        image.at<cv::Vec3b>(x, y) = p;
+                                }
+                                else if( this->map_->getProb(x, y) < 0.0 ){
+                                        cv::Vec3b p;
+                                        p[0] = 255;
+                                        p[1] = 255;
+                                        p[2] = 255;
+
+                                        image.at<cv::Vec3b>(x, y) = p;
+                                }
+			}
        	 	}
 	
 		for( int i = 0; i < numParticles_; i ++ ){
@@ -190,12 +202,12 @@ public:
                 	p[1] = 0;
                 	p[2] = 255;
 
-                //image.at<cv::Vec3b>((int)particles_[i].x, (int)particles_[i].y) = p;
-                	cv::circle(image, cv::Point2d(particles_[i].y, particles_[i].x), 2, cv::Scalar(0, 0, 255), -1);
+                	image.at<cv::Vec3b>((int)particles_[i].x, (int)particles_[i].y) = p;
+                	//cv::circle(image, cv::Point2d(particles_[i].y, particles_[i].x), 2, cv::Scalar(0, 0, 255), -1);
         	}
 
         	// robot pose
-        	cv::circle(image, cv::Point2d(robot_pose_.y, robot_pose_.x), 5, cv::Scalar(0, 255, 0), -1);
+        	cv::circle(image, cv::Point2d(robot_pose_.y, robot_pose_.x), 1, cv::Scalar(0, 255, 0), -1);
 
         	cv::imshow( "particle", image );
 	}
@@ -318,8 +330,8 @@ private:
 	lidar_measure measurement_;	
 
 	float alpha1_ = 0.025, alpha2_ = 0.025, alpha3_ = 0.4, alpha4_ = 0.4;
-        float threshold_, map_threshold_ = 0.95, obstacle_threshold_ = 0.2, lidar_offset_ = 25;
-        int numParticles_ = 3000, ray_tracing_step_ = 1, resolution_ = 10, lidar_range_max_ = 1000;
+        float threshold_, map_threshold_ = 0.95, obstacle_threshold_ = 0.2, lidar_offset_ = 0;
+        int numParticles_ = 1000, ray_tracing_step_ = 1, resolution_ = 10, lidar_range_max_ = 10;
 };
 
 #endif

@@ -6,20 +6,20 @@ int main()
 {
 	std::cout<<"---------------------- MC Localization -----------------------"<<std::endl;
 	
-	LoadLog log( "./data/log/robotdata5.log" );
+	LoadLog log( "mcl_data.txt" );
         std::vector<log_data> logData = log.getLog();
 
 	MCL mcl;
-	mcl.loadMap( "./data/map/wean.dat" );
-	mcl.initParticles();
+        mcl.loadMap( "test3.map" );
+        mcl.initParticles();
 
-	mcl.displayMap();
+        mcl.displayMap();
 
-	cv::waitKey(0);
+        cv::waitKey(0);
 
-	mcl.setLogData( logData );
+        mcl.setLogData( logData );
 
-	mcl.mclTest();
+        mcl.mclTest();
 
 	return 0;
 	
